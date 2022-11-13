@@ -1,0 +1,8 @@
+
+	Para poder ejecutar el programa es importante que en consola, ya sea en CMD o 
+	en la terminal de visual code se ejecute el comando en la direccion donde se 
+	encuentre el proyecto:
+
+	dlib_venv/Scripts/activate
+
+	para que funcionen las librerias
