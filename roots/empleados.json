@@ -1,13 +1,9 @@
 {
 	"empleados":[
-		
 		{
-			"nombre":"MARIANA",
-			"apellido": "HERRERA",
-			"sexo":"F",
-			"fecha_nacimiento":"07/02/1977",
-			"image":"Mariana.JPG"
+			"clave": "123",
+			"nombre": "RAMIRO",
+			"empleado": true
 		}
 	]
-
 }
