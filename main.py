@@ -1,3 +1,9 @@
+try:
+    from ctypes import windll
+    windll.shcore.SetProcessDpiAwareness(1)
+except:
+    pass
+
 from datetime import datetime
 from tkinter import *
 from PIL import Image, ImageTk
@@ -5,17 +11,14 @@ import cv2
 import imutils
 import numpy as np
 import config_interfaz as conf
+import csv
 import os
-import json
 import face_recognition as fr
 import time
-
-class Empleados:
-    def __init__(self, nombre, empleado):
-
-        self.nombre = nombre
-        self.empleado = empleado
-
+import empleados
+from empleados import *
+import threading
+from tkinter import ttk
 
 path = 'image'
 images = []
@@ -31,11 +34,6 @@ comp1 = 100
 
 
 def leeDatos():
-    with open('roots/empleados.json') as file:
-        data = json.load(file)
-        d = {}
-        for dato in data['empleados']:
-            d[dato['clave']] = Empleados(dato['nombre'], dato['empleado'])
     clas = []
     listacod = []
     for lis in lista:
@@ -47,46 +45,41 @@ def leeDatos():
         listacod.append(cod)
         # Almacenamos nombre
         clas.append(os.path.splitext(lis)[0])
-    return d, clas, listacod
+    return clas, listacod
 
 
 # Temporal
-datos, clases, rostroscod = leeDatos()
+clases, rostroscod = leeDatos()
+
+def registrar(clave: str, nombre: str, imagen: str):
+    info = datetime.now()
+    fecha = info.strftime('%Y-%m-%d')
+    hora = info.strftime('%H:%M:%S')
+    registro = Registro(clave=clave, nombre=nombre, fecha=fecha, hora=hora, imagen=imagen)
+    insertarRegistro(registro=registro)
 
 
-def registro(clave, nombre):
-    # Se abre e archivo en modo elctura y escritura
-    with open('roots/Registro.csv', 'r+') as h:
-        # Leemos la informacion
-        data = h.readline()
-        # Creamos lista de nombres
-        listanombres = []
+def guardarHilo(fecha: str):
+    t1 = threading.Thread(target=guardarCSV,args=(fecha,))
+    t1.start()
 
-        # Iteramos con cada linea del doc
-        for line in data:
-            # Buscamos la entrada y la diferenciamos con,
-            entrada = line.split(',')
-            # Almacenamos los nombres
-            listanombres.append(entrada[0])
 
-        # Verificamos si ya hemos almacenado el nombre
-        if nombre not in listanombres:
-            # Extraemos informacion acctual
-            info = datetime.now()
-            # Extraemos fecha
-            fecha = info.strftime('%Y:%m:%d')
-            # Extraemos hora
-            hora = info.strftime('%H:%M:%S')
+def guardarCSV(fecha):
+    limpiarCSV(f"roots/{fecha}.csv")
+    file = open(f"roots/{fecha}.csv", 'a+', newline='')
+    registros = empleados.consultaRegistrosFecha(fecha)
+    fecha = "2022-11-20"
+    wr = csv.writer(file, delimiter=',')
+    wr.writerows(registros)
+    file.close()
 
-            # Guardamos la informacion
-            h.writelines(f'\n{clave},{nombre},{fecha},{hora}')
+def limpiarCSV(nombre):
+    file = open(nombre, 'w')
+    file.close()
 
 
 def analisis(frame):
-    global comp1
-    global horaVisto
-    global horaDesc
-    global anterior
+    global comp1, horaVisto, horaDesc, anterior
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame2 = cv2.resize(frame, (0, 0), None, 0.25, 0.25)
     frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
@@ -110,12 +103,13 @@ def analisis(frame):
                 comp1 = indice
 
             if comp1 == indice:
-                if datos[nombre].empleado:
+                emp = empleados.consultaClave(nombre)
+                if emp.empleado == 0:
                     cv2.rectangle(frame, (xi, yi), (xf, yf), (125, 220, 0), 3)
                     cv2.rectangle(frame, (xi, yf-35), (xf, yf),(125, 220, 0), cv2.FILLED)
-                    cv2.putText(frame, datos[nombre].nombre, (xi+6, yf-6),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    cv2.putText(frame, emp.nombre, (xi+6, yf-6),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                     if time.time() - horaVisto > 60 or nombre != anterior:
-                        registro(nombre, datos[nombre].nombre)
+                        registrar(clave=emp.clave, nombre=emp.nombre, imagen=emp.imagen)
                         horaVisto = time.time()
                         anterior = nombre
                 else:
@@ -123,15 +117,19 @@ def analisis(frame):
                     cv2.rectangle(frame, (xi, yf-35), (xf, yf),(50, 50, 255), cv2.FILLED)
                     cv2.putText(frame, "CRIMINAL", (xi+6, yf-6),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                     if time.time() - horaVisto > 60 or nombre != anterior:
-                        registro(nombre, 'CRIMINAL')
+                        registrar(clave=emp.clave, nombre=emp.nombre, imagen=emp.imagen)
                         horaVisto = time.time()
                         anterior = nombre
         else:
             if guardarDesc:
                 if time.time() - horaDesc > 30:
-                    nombre = f"desconocidos/{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
-                    cv2.imwrite(nombre, frame)
-                    registro(nombre, "DESCONOCIDO")
+                    clave = datetime.now().strftime('%Y%m%d%H%M%S')
+                    nombre = "DESCONOCIDO"
+                    imagen = f"desconocidos/{clave}.jpg"
+
+                    cv2.imwrite(imagen, frame)
+
+                    registrar(clave=clave, nombre=nombre, imagen=imagen)
                     horaDesc = time.time()
             cv2.rectangle(frame, (xi, yi), (xf, yf), (50, 50, 255), 3)
             cv2.rectangle(frame, (xi, yf-35), (xf, yf),(50, 50, 255), cv2.FILLED)
@@ -180,12 +178,29 @@ lblTitulo = Label(
 lblTitulo.place(x=550, y=5)
 
 left_frame = Frame(
-    raiz, bg="blue",
+    raiz, bg="white",
     width=conf.width_prct(60),
     height=conf.height_prct(90)
 )
 left_frame.place(x=0, y=conf.height_prct(10))
 
+notebook = ttk.Notebook(left_frame, width=int(conf.width_prct(40)), height=int(conf.height_prct(85)))
+label1 = ttk.Label(notebook, width=int(conf.width_prct(25)))
+label2 = ttk.Label(notebook, width=int(conf.width_prct(25)))
+label3 = ttk.Label(notebook, width=int(conf.width_prct(25)))
+label4 = ttk.Label(notebook, width=int(conf.width_prct(25)))
+
+notebook.add(label1, text="Agregar", padding=10)
+notebook.add(label2, text="Consultar", padding=10)
+notebook.add(label3, text="Eliminar", padding=10)
+notebook.add(label4, text="Utilidades", padding=10)
+notebook.place(x=0, y=0)
+
+
+"""
+btnCSV = Button(left_frame, text="Generar CSV", command=guardarHilo()) # ACA FALTA PONER EL ATRIBUTO
+btnCSV.grid(column=0, row=0, columnspan=2, padx=15)
+"""
 center_frame = Frame(
     raiz, bg="red",
     width=conf.width_prct(60),
