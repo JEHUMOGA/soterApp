@@ -10,7 +10,7 @@ from PIL import Image, ImageTk
 import cv2
 import imutils
 import numpy as np
-import config_interfaz as conf
+import config as conf
 import csv
 import os
 import face_recognition as fr
@@ -19,6 +19,7 @@ import empleados
 from empleados import *
 import threading
 from tkinter import ttk
+from correos import EnvioCorreo
 
 path = 'image'
 images = []
@@ -27,10 +28,11 @@ lista = os.listdir(path)
 horaVisto = 0
 horaDesc = 0
 anterior = None
-guardarDesc = True
 
 # Variables
 comp1 = 100
+
+empleados.ejecucionInicial()
 
 
 def leeDatos():
@@ -110,8 +112,8 @@ def analisis(frame):
                     cv2.putText(frame, emp.nombre, (xi+6, yf-6),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                     if time.time() - horaVisto > 60 or nombre != anterior:
                         registrar(clave=emp.clave, nombre=emp.nombre, imagen=emp.imagen)
-                        horaVisto = time.time()
                         anterior = nombre
+                        horaVisto = time.time()
                 else:
                     cv2.rectangle(frame, (xi, yi), (xf, yf), (50, 50, 255), 3)
                     cv2.rectangle(frame, (xi, yf-35), (xf, yf),(50, 50, 255), cv2.FILLED)
@@ -120,16 +122,26 @@ def analisis(frame):
                         registrar(clave=emp.clave, nombre=emp.nombre, imagen=emp.imagen)
                         horaVisto = time.time()
                         anterior = nombre
+                        if conf.envio_alerta_crimi():
+                            info = datetime.now()
+                            fecha = info.strftime('%Y-%m-%d')
+                            hora = info.strftime('%H:%M:%S')
+                            hilo = threading.Thread(target=EnvioCorreo.enviar_correo, args=(emp.clave, fecha, hora, emp.imagen, True))
+                            hilo.start()
         else:
-            if guardarDesc:
+            if conf.guardar_desc():
+                clave = datetime.now().strftime('%Y%m%d%H%M%S')
+                nombre = "DESCONOCIDO"
+                imagen = f"desconocidos/{clave}.jpg"
                 if time.time() - horaDesc > 30:
-                    clave = datetime.now().strftime('%Y%m%d%H%M%S')
-                    nombre = "DESCONOCIDO"
-                    imagen = f"desconocidos/{clave}.jpg"
-
                     cv2.imwrite(imagen, frame)
-
                     registrar(clave=clave, nombre=nombre, imagen=imagen)
+                    if conf.envio_correo_autorizado():
+                        info = datetime.now()
+                        fecha = info.strftime('%Y-%m-%d')
+                        hora = info.strftime('%H:%M:%S')
+                        hilo = threading.Thread(target=EnvioCorreo.enviar_correo, args=(clave, fecha, hora, imagen, False))
+                        hilo.start()
                     horaDesc = time.time()
             cv2.rectangle(frame, (xi, yi), (xf, yf), (50, 50, 255), 3)
             cv2.rectangle(frame, (xi, yf-35), (xf, yf),(50, 50, 255), cv2.FILLED)
@@ -174,8 +186,8 @@ top_frame = Frame(
 top_frame.place(x=0, y=0)
 
 lblTitulo = Label(
-    top_frame, text="SoterApp - Aplicación de Vigilancia", font="bold")
-lblTitulo.place(x=550, y=5)
+    top_frame, text="SoterApp - Aplicación de Vigilancia", font=("Arial", 25))
+lblTitulo.place(x=400, y=5)
 
 left_frame = Frame(
     raiz, bg="white",
@@ -198,7 +210,7 @@ notebook.place(x=0, y=0)
 
 
 """
-btnCSV = Button(left_frame, text="Generar CSV", command=guardarHilo()) # ACA FALTA PONER EL ATRIBUTO
+btnCSV = Button(left_frame, text="Generar CSV", command=guardarHilo("2022-11-20")) # ACA FALTA PONER EL ATRIBUTO
 btnCSV.grid(column=0, row=0, columnspan=2, padx=15)
 """
 center_frame = Frame(
@@ -211,6 +223,7 @@ center_frame.place(x=conf.width_prct(40), y=conf.height_prct(10))
 lblVideo = Label(center_frame, bg="black")
 lblVideo.place(x=0, y=0)
 
-grabacion()
+t1 = threading.Thread(target=grabacion)
+t1.start()
 
 raiz.mainloop()

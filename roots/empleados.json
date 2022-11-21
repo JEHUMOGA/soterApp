@@ -1,9 +1,0 @@
-{
-	"empleados":[
-		{
-			"clave": "123",
-			"nombre": "RAMIRO",
-			"empleado": true
-		}
-	]
-}
